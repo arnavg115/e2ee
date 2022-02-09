@@ -28,6 +28,25 @@ roomDiv.innerText = `Room: ${params.room}`;
 current.innerText = `Username: ${params.uname}`;
 
 async function main() {
+  const iv = new Uint8Array(
+    Array.from(Array(16)).map((x) => Math.floor(Math.random() * 100))
+  );
+  const encrypt = async (msg) => {
+    const enc = await cryptos.encrypt(
+      { name: "AES-CBC", iv },
+      combined,
+      new TextEncoder().encode(msg)
+    );
+    return bufferToHex(enc);
+  };
+  const decrypt = async (enc, ivs) => {
+    const dec = await cryptos.decrypt(
+      { name: "AES-CBC", iv: hexToAB(ivs) },
+      combined,
+      hexToAB(enc)
+    );
+    return new TextDecoder("utf-8").decode(dec);
+  };
   const getCombined = async () => {
     const ket = hexToAB(users[0].key);
     myKey = await cryptos.importKey(
@@ -40,7 +59,7 @@ async function main() {
     combined = await cryptos.deriveKey(
       {
         name: "ECDH",
-        namedCurve: "P-256",
+        public: myKey,
       },
       key.privateKey,
       {
@@ -103,24 +122,26 @@ async function main() {
     }
   });
 
-  msg.addEventListener("submit", (e) => {
+  msg.addEventListener("submit", async (e) => {
     e.preventDefault();
     const p = document.createElement("p");
     p.classList.add(["me"]);
     p.innerText = `${inpt.value} from You`;
     messages.appendChild(p);
-
+    const enc = await encrypt(inpt.value);
     socket.emit("message_server", {
       room: params.room,
       uname: params.uname,
-      message: inpt.value,
+      message: enc,
+      iv: bufferToHex(iv),
     });
     inpt.value = "";
   });
-  socket.on("message_client", (res) => {
+  socket.on("message_client", async (res) => {
+    const msgss = await decrypt(res.message, res.iv);
     const p = document.createElement("p");
     p.classList.add(["other"]);
-    p.innerText = `${res.message} from ${res.uname}`;
+    p.innerText = `${msgss} from ${res.uname}`;
     messages.appendChild(p);
   });
 }
